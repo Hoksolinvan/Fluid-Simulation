@@ -195,16 +195,7 @@ void set_bnd(int b, float* x){
             x[IX(i,N+1)] = x[IX(i,N)];
             
         }
-        else if(b==1){
-            
-            x[IX(0,i)]= x[IX(1,i)];
-            x[IX(N+1,i)] = x[IX(N,i)];
-            x[IX(i,0)]= - x[IX(i,0)];
-            x[IX(i,N+1)] = x[IX(i,N)];
-            
-        }
-        else if(b==2){
-            
+        else if(b==1){ // horizontal
             
              x[IX(0,i)]= x[IX(1,i)];
             x[IX(N+1,i)] = -x[IX(N+1,i)];
@@ -212,19 +203,27 @@ void set_bnd(int b, float* x){
             x[IX(i,N+1)] = x[IX(i,N)];
             
         }
+        else if(b==2){ // vertical 
+            
+            
+            
+             x[IX(0,i)]= -x[IX(0,i)];
+            x[IX(N+1,i)] = x[IX(N,i)];
+            x[IX(i,0)]=  x[IX(i,1)];
+            x[IX(i,N+1)] = -x[IX(i,N+1)];
+            
+            
+        }
         
     }
     
-    if(b==1){
+    if(b==1 || b==2){
         x[IX(0,0)] = (x[IX(1,0)] + x[IX(0,1)])/2;
         x[IX(N+1,0)] = (x[IX(N,0)] + x[IX(N+1,1)]) / 2;
         x[IX(0,N+1)] = (x[IX(1,N+1)] + x[IX(0,N)]) / 2;
         x[IX(N+1, N+1)] = (x[IX(N,N+1)]+x[IX(N+1,N)])/2;
     }
-    
-    else if(b==2){
-        
-    }
+   
     
    
     
