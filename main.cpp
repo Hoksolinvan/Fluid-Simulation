@@ -31,7 +31,7 @@ void diffuse(float* x=dens, float* x0=dens_prev, float diff=0.001f, float dt=1);
 void advect(float* d, float* d0, float* u, float* v, float dt);
 void dens_step(float* x=dens, float* x0=dens_prev, float* current_u=u, float* current_v=v, float diff=0.002f, float dt=1);
 void set_bnd(int b, float* x);
-
+void project(float* u, float* v, float* p, float* div);
 
 void advect_tester(){
     for(int i = 0; i < (N+2)*(N+2); i++){
@@ -173,13 +173,19 @@ void advect(float* d, float* d0, float* u, float* v, float dt){
 }
 
 
-void dens_step(float* x, float* x0, float* current_u, float* current_v, float diff, float dt){
-    add_source(x,source,dt);
-    diffuse(dens, dens_prev, 0.002f, 1.0f);
-    memcpy(dens_prev, dens, sizeof(dens));
-    advect(dens,dens_prev,u,v,1.0f);
-    memcpy(dens_prev, dens, sizeof(dens));
-
+Here's the correct dens_step:
+cppvoid dens_step(float* x, float* x0, float* current_u, float* current_v, float diff, float dt){
+    
+    add_source(x, source, dt);
+    
+    memcpy(x0, x, (N+2)*(N+2)*sizeof(float));
+    diffuse(x, x0, diff, dt);
+    set_bnd(0, x);
+    
+    memcpy(x0, x, (N+2)*(N+2)*sizeof(float));
+    advect(x, x0, current_u, current_v, dt);
+    set_bnd(0, x);
+    
     return;
 }
 
@@ -198,8 +204,8 @@ void set_bnd(int b, float* x){
         else if(b==1){ // horizontal
             
              x[IX(0,i)]= x[IX(1,i)];
-            x[IX(N+1,i)] = -x[IX(N+1,i)];
-            x[IX(i,0)]= - x[IX(i,0)];
+            x[IX(N+1,i)] = -x[IX(N,i)];
+            x[IX(i,0)]=  x[IX(i,1)];
             x[IX(i,N+1)] = x[IX(i,N)];
             
         }
@@ -207,10 +213,10 @@ void set_bnd(int b, float* x){
             
             
             
-             x[IX(0,i)]= -x[IX(0,i)];
+             x[IX(0,i)]= x[IX(1,i)];
             x[IX(N+1,i)] = x[IX(N,i)];
             x[IX(i,0)]=  x[IX(i,1)];
-            x[IX(i,N+1)] = -x[IX(i,N+1)];
+            x[IX(i,N+1)] = -x[IX(i,N)];
             
             
         }
@@ -218,10 +224,10 @@ void set_bnd(int b, float* x){
     }
     
     if(b==1 || b==2){
-        x[IX(0,0)] = (x[IX(1,0)] + x[IX(0,1)])/2;
-        x[IX(N+1,0)] = (x[IX(N,0)] + x[IX(N+1,1)]) / 2;
-        x[IX(0,N+1)] = (x[IX(1,N+1)] + x[IX(0,N)]) / 2;
-        x[IX(N+1, N+1)] = (x[IX(N,N+1)]+x[IX(N+1,N)])/2;
+       x[IX(0,0)]       = 0.5f*(x[IX(1,0)]   + x[IX(0,1)]);
+x[IX(N+1,0)]     = 0.5f*(x[IX(N,0)]   + x[IX(N+1,1)]);
+x[IX(0,N+1)]     = 0.5f*(x[IX(1,N+1)] + x[IX(0,N)]);
+x[IX(N+1,N+1)]   = 0.5f*(x[IX(N,N+1)] + x[IX(N+1,N)]);
     }
    
     
@@ -230,3 +236,38 @@ void set_bnd(int b, float* x){
     return;
 }
 
+
+void project(float* u, float* v, float* p, float* div){
+    
+    // step 1: compute divergence
+    for(int j = 1; j <= N; j++){
+        for(int i = 1; i <= N; i++){
+            div[IX(i,j)] = -0.5f*(u[IX(i+1,j)]-u[IX(i-1,j)]+
+                                   v[IX(i,j+1)]-v[IX(i,j-1)])/N;
+            p[IX(i,j)] = 0;
+        }
+    }
+    set_bnd(0, div);
+    set_bnd(0, p);
+    
+    // step 2: solve poisson equation for pressure (gauss-seidel)
+    for(int k = 0; k < 20; k++){
+        for(int j = 1; j <= N; j++){
+            for(int i = 1; i <= N; i++){
+                p[IX(i,j)] = (div[IX(i,j)]+p[IX(i-1,j)]+p[IX(i+1,j)]+
+                               p[IX(i,j-1)]+p[IX(i,j+1)])/4;
+            }
+        }
+        set_bnd(0, p);
+    }
+    
+    // step 3: subtract pressure gradient
+    for(int j = 1; j <= N; j++){
+        for(int i = 1; i <= N; i++){
+            u[IX(i,j)] -= 0.5f*(p[IX(i+1,j)]-p[IX(i-1,j)])*N;
+            v[IX(i,j)] -= 0.5f*(p[IX(i,j+1)]-p[IX(i,j-1)])*N;
+        }
+    }
+    set_bnd(1, u);
+    set_bnd(2, v);
+}
