@@ -46,7 +46,7 @@ int main(){
     memset(dens, 0, sizeof(dens));
     memset(dens_prev, 0, sizeof(dens_prev));
     
-    dens_prev[IX(8,8)] = 100.0f;
+    dens[IX(8,8)] = 100.0f;
     
     advect_tester();
     
