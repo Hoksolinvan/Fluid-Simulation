@@ -32,6 +32,7 @@ void advect(float* d, float* d0, float* u, float* v, float dt);
 void dens_step(float* x=dens, float* x0=dens_prev, float* current_u=u, float* current_v=v, float diff=0.002f, float dt=1);
 void set_bnd(int b, float* x);
 void project(float* u, float* v, float* p, float* div);
+void vel_step(float* current_u=u, float* current_v=v, float* u0=u_prev, float* v0=v_prev, float visc=0.0001f, float dt=1);
 
 void advect_tester(){
     for(int i = 0; i < (N+2)*(N+2); i++){
@@ -46,11 +47,13 @@ int main(){
     memset(dens, 0, sizeof(dens));
     memset(dens_prev, 0, sizeof(dens_prev));
     
+
     dens[IX(8,8)] = 100.0f;
     
     advect_tester();
     
    for(int step = 0; step < 10; step++){
+    vel_step();
     dens_step();
     printout();
     std::cout << "--- step " << step << " ---" << std::endl;
@@ -188,6 +191,36 @@ void dens_step(float* x, float* x0, float* current_u, float* current_v, float di
 }
 
 
+void vel_step(float* current_u, float* current_v, float* u0, float* v0, float visc, float dt){
+
+    // diffuse each velocity component (b=1 for u/horizontal, b=2 for v/vertical
+    // boundary handling — these enforce no-flow-through-wall at the box edges)
+    memcpy(u0, current_u, (N+2)*(N+2)*sizeof(float));
+    diffuse(current_u, u0, visc, dt);
+    set_bnd(1, current_u);
+
+    memcpy(v0, current_v, (N+2)*(N+2)*sizeof(float));
+    diffuse(current_v, v0, visc, dt);
+    set_bnd(2, current_v);
+
+ 
+    project(current_u, current_v, u0, v0);
+
+ 
+    memcpy(u0, current_u, (N+2)*(N+2)*sizeof(float));
+    memcpy(v0, current_v, (N+2)*(N+2)*sizeof(float));
+    advect(current_u, u0, u0, v0, dt);
+    advect(current_v, v0, u0, v0, dt);
+    set_bnd(1, current_u);
+    set_bnd(2, current_v);
+
+    // project once more, since advection can reintroduce divergence
+    project(current_u, current_v, u0, v0);
+
+    return;
+}
+
+
 void set_bnd(int b, float* x){
     
     for(int i=0; i<N+2;i++){
@@ -221,12 +254,11 @@ void set_bnd(int b, float* x){
         
     }
     
-    if(b==1 || b==2){
-       x[IX(0,0)]       = 0.5f*(x[IX(1,0)]   + x[IX(0,1)]);
-x[IX(N+1,0)]     = 0.5f*(x[IX(N,0)]   + x[IX(N+1,1)]);
-x[IX(0,N+1)]     = 0.5f*(x[IX(1,N+1)] + x[IX(0,N)]);
-x[IX(N+1,N+1)]   = 0.5f*(x[IX(N,N+1)] + x[IX(N+1,N)]);
-    }
+   
+    x[IX(0,0)]       = 0.5f*(x[IX(1,0)]   + x[IX(0,1)]);
+    x[IX(N+1,0)]     = 0.5f*(x[IX(N,0)]   + x[IX(N+1,1)]);
+    x[IX(0,N+1)]     = 0.5f*(x[IX(1,N+1)] + x[IX(0,N)]);
+    x[IX(N+1,N+1)]   = 0.5f*(x[IX(N,N+1)] + x[IX(N+1,N)]);
    
     
    
