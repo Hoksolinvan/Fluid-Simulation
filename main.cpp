@@ -172,9 +172,7 @@ void advect(float* d, float* d0, float* u, float* v, float dt){
     return;
 }
 
-
-Here's the correct dens_step:
-cppvoid dens_step(float* x, float* x0, float* current_u, float* current_v, float diff, float dt){
+void dens_step(float* x, float* x0, float* current_u, float* current_v, float diff, float dt){
     
     add_source(x, source, dt);
     
