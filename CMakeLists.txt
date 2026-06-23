@@ -10,4 +10,4 @@ find_package(glfw3 REQUIRED)
 
 add_executable(Fluidsim main.cpp)
 
-target_link_libraries(fluidsim PRIVATE OpenGL::GL GLEW::GLEW glfw)
+target_link_libraries(Fluidsim PRIVATE OpenGL::GL GLEW::GLEW glfw)
