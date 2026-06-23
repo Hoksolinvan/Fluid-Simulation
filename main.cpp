@@ -341,3 +341,184 @@ void project(float* u, float* v, float* p, float* div){
     set_bnd(1, u);
     set_bnd(2, v);
 }
+
+
+
+
+GLFWwindow* window = nullptr;
+GLuint shaderProgram = 0;
+GLuint VAO = 0, VBO = 0, EBO = 0;
+GLuint densityTex = 0;
+GLint  densityTexLoc = -1;
+ 
+static const char* kVertexShaderSrc = R"GLSL(
+#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoord;
+out vec2 TexCoord;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}
+)GLSL";
+ 
+static const char* kFragmentShaderSrc = R"GLSL(
+#version 330 core
+in vec2 TexCoord;
+out vec4 FragColor;
+uniform sampler2D densityTex;
+ 
+// black -> blue -> cyan -> white density colormap
+vec3 colormap(float t) {
+    t = clamp(t, 0.0, 1.0);
+    vec3 c1 = vec3(0.00, 0.00, 0.05);
+    vec3 c2 = vec3(0.05, 0.20, 0.60);
+    vec3 c3 = vec3(0.20, 0.80, 1.00);
+    vec3 c4 = vec3(1.00, 1.00, 1.00);
+    if (t < 0.33)      return mix(c1, c2, t / 0.33);
+    else if (t < 0.66) return mix(c2, c3, (t - 0.33) / 0.33);
+    else               return mix(c3, c4, (t - 0.66) / 0.34);
+}
+ 
+void main() {
+    float d = texture(densityTex, TexCoord).r;
+    float t = d / 100.0; // dens[IX(8,8)] is seeded at 100.0f
+    FragColor = vec4(colormap(t), 1.0);
+}
+)GLSL";
+ 
+GLuint compileShader(GLenum type, const char* src){
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+ 
+    GLint ok = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if(!ok){
+        char log[1024];
+        glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
+        std::cerr << "Shader compile error: " << log << std::endl;
+    }
+    return shader;
+}
+ 
+GLuint createShaderProgram(const char* vertSrc, const char* fragSrc){
+    GLuint vs = compileShader(GL_VERTEX_SHADER, vertSrc);
+    GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragSrc);
+ 
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+ 
+    GLint ok = 0;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if(!ok){
+        char log[1024];
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        std::cerr << "Program link error: " << log << std::endl;
+    }
+ 
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    return program;
+}
+ 
+bool initRenderer(){
+    if(!glfwInit()){
+        std::cerr << "Failed to initialize GLFW" << std::endl;
+        return false;
+    }
+ 
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
+ 
+    window = glfwCreateWindow(600, 600, "Fluid Simulation", nullptr, nullptr);
+    if(!window){
+        std::cerr << "Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        return false;
+    }
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
+ 
+    glewExperimental = GL_TRUE;
+    if(glewInit() != GLEW_OK){
+        std::cerr << "Failed to initialize GLEW" << std::endl;
+        return false;
+    }
+ 
+    shaderProgram = createShaderProgram(kVertexShaderSrc, kFragmentShaderSrc);
+    densityTexLoc = glGetUniformLocation(shaderProgram, "densityTex");
+ 
+    float quadVerts[] = {
+        // pos        // tex
+        -1.f, -1.f,   0.f, 0.f,
+         1.f, -1.f,   1.f, 0.f,
+         1.f,  1.f,   1.f, 1.f,
+        -1.f,  1.f,   0.f, 1.f,
+    };
+    unsigned int quadIdx[] = { 0, 1, 2,  2, 3, 0 };
+ 
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+ 
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVerts), quadVerts, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quadIdx), quadIdx, GL_STATIC_DRAW);
+ 
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+ 
+    glGenTextures(1, &densityTex);
+    glBindTexture(GL_TEXTURE_2D, densityTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, N+2, N+2, 0, GL_RED, GL_FLOAT, dens);
+ 
+    return true;
+}
+ 
+void renderFrame(){
+    int fbW, fbH;
+    glfwGetFramebufferSize(window, &fbW, &fbH);
+ 
+    glBindTexture(GL_TEXTURE_2D, densityTex);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, N+2, N+2, GL_RED, GL_FLOAT, dens);
+ 
+    glViewport(0, 0, fbW, fbH);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+ 
+    glUseProgram(shaderProgram);
+    glUniform1i(densityTexLoc, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, densityTex);
+ 
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+ 
+    glfwSwapBuffers(window);
+}
+ 
+void shutdownRenderer(){
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
+    glDeleteBuffers(1, &EBO);
+    glDeleteTextures(1, &densityTex);
+    glDeleteProgram(shaderProgram);
+ 
+    glfwDestroyWindow(window);
+    glfwTerminate();
+}
