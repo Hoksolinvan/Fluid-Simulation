@@ -1,5 +1,10 @@
-#include <iostream>
+
+#include <GL/glew.h>      
+#include <GLFW/glfw3.h>
+#include <cstdio>
 #include <cstring>
+#include <cmath>
+#include <algorithm>
 
 
 #define IX(i,j) ((i)+(N+2)*(j))
@@ -34,6 +39,17 @@ void set_bnd(int b, float* x);
 void project(float* u, float* v, float* p, float* div);
 void vel_step(float* current_u=u, float* current_v=v, float* u0=u_prev, float* v0=v_prev, float visc=0.0001f, float dt=1);
 
+
+
+extern GLFWwindow* window;
+bool initRenderer();
+void renderFrame();
+void shutdownRenderer();
+GLuint compileShader(GLenum type, const char* src);
+GLuint createShaderProgram(const char* vertSrc, const char* fragSrc);
+
+
+
 void advect_tester(){
     for(int i = 0; i < (N+2)*(N+2); i++){
     u[i] = 0.05f;
@@ -43,23 +59,47 @@ void advect_tester(){
     return;
 }
 
+
 int main(){
     memset(dens, 0, sizeof(dens));
     memset(dens_prev, 0, sizeof(dens_prev));
     
-
+ 
     dens[IX(8,8)] = 100.0f;
     
     advect_tester();
-    
-   for(int step = 0; step < 10; step++){
-    vel_step();
-    dens_step();
-    printout();
-    std::cout << "--- step " << step << " ---" << std::endl;
-}
+ 
+  
+    if(!initRenderer()){
+        std::cerr << "Failed to initialize renderer" << std::endl;
+        return -1;
+    }
+ 
+    int step = 0;
+ 
+    while(!glfwWindowShouldClose(window)){
+ 
+        if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+            glfwSetWindowShouldClose(window, true);
+ 
+        vel_step();
+        dens_step();
+ 
+     
+        if(glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS){
+            printout();
+            std::cout << "--- step " << step << " ---" << std::endl;
+        }
+ 
+       
+        renderFrame();
+        glfwPollEvents();
+ 
+        step++;
+    }
+ 
+    shutdownRenderer(); 
     return 0;
-
 }
 
 
